@@ -53,6 +53,10 @@ export interface ForceGraphNode extends Node, ISelectableDataPoint {
     isOver?: boolean;
     hideLabel?: boolean;
     weight?: number;
+    dataWeight?: number;
+    color?: string;
+    colorValue?: string;
+    colorLabel?: string;
 }
 
 export interface ITextRect {
@@ -81,6 +85,7 @@ export interface ForceGraphData {
     maxFiles: number;
     linkedByName: LinkedByName;
     linkTypes: LinkTypes;
+    nodeCategories: NodeColorDataPoints;
     settings: ForceGraphSettings;
     formatter: IValueFormatter;
 }
@@ -96,6 +101,17 @@ export interface LinkTypes {
 
 export interface LinkedByName {
     [linkName: string]: number;
+}
+
+export interface NodeColorDataPoint {
+    color: string;
+    label: string;
+    selectionId: ISelectionId;
+    value: string;
+}
+
+export interface NodeColorDataPoints {
+    [category: string]: NodeColorDataPoint;
 }
 
 export interface ForceGraphBehaviorOptions {

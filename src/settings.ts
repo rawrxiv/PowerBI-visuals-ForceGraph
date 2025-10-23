@@ -325,13 +325,21 @@ class NodeOptionsGroup extends FormattingSettingsCard {
     public slices: FormattingSettingsSlice[] = [this.fillColor, this.strokeColor, this.nameMaxLength, this.highlightReachableLinks];
 }
 
+class NodeColorSettingsGroup extends FormattingSettingsCard {
+    public name: string = "nodeDataColors";
+    public displayNameKey: string = "Visual_NodeColors";
+    public slices: FormattingSettingsSlice[] = [];
+    public visible: boolean = false;
+}
+
 class NodesSettings extends FormattingSettingsCompositeCard {
     public imageGroup: NodeImageSettingsGroup = new NodeImageSettingsGroup();
     public optionGroup: NodeOptionsGroup = new NodeOptionsGroup();
-   
+    public colorGroup: NodeColorSettingsGroup = new NodeColorSettingsGroup();
+
     public name: string = "nodes";
     public displayNameKey: string = "Visual_Nodes";
-    groups: FormattingSettingsGroup[] = [this.optionGroup, this.imageGroup];
+    groups: FormattingSettingsGroup[] = [this.optionGroup, this.imageGroup, this.colorGroup];
 }
 
 class SizeSettings extends FormattingSettingsCard{

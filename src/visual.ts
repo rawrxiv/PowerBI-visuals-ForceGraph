@@ -104,12 +104,13 @@ import IValueFormatter = valueFormatter.IValueFormatter;
 
 import { ITooltipServiceWrapper, createTooltipServiceWrapper } from "powerbi-visuals-utils-tooltiputils";
 import { ColorHelper } from "powerbi-visuals-utils-colorutils";
-import { FormattingSettingsService } from "powerbi-visuals-utils-formattingmodel";
+import { formattingSettings, FormattingSettingsService } from "powerbi-visuals-utils-formattingmodel";
+import { dataViewWildcard } from "powerbi-visuals-utils-dataviewutils";
 
 import { ForceGraphColumns } from "./columns";
 import { ForceGraphSettings, LinkColorType } from "./settings";
 import { ForceGraphTooltipsFactory } from "./tooltipsFactory";
-import { ForceGraphData, ForceGraphNode, ForceGraphNodes, ForceGraphLink, LinkedByName, ITextRect, ForceGraphBehaviorOptions, LinkTypes } from "./dataInterfaces";
+import { ForceGraphData, ForceGraphNode, ForceGraphNodes, ForceGraphLink, LinkedByName, ITextRect, ForceGraphBehaviorOptions, LinkTypes, NodeColorDataPoints } from "./dataInterfaces";
 import { ExternalLinksTelemetry } from "./telemetry";
 import { ForceGraphBehavior } from "./behavior";
 
@@ -133,6 +134,7 @@ export class ForceGraph implements IVisual {
 
     private static ImagePosition: number = -12;
     private static MinNodeWeight: number = 5;
+    private static MaxNodeRadius: number = 50;
     private static GravityFactor: number = 100;
     private static LinkDistance: number = 100;
     private static HoverOpacity: number = 0.4;
@@ -356,7 +358,101 @@ export class ForceGraph implements IVisual {
             sourceTypeCategories: any[] = (categorical.SourceType || { values: [] }).values,
             targetTypeCategories: any[] = (categorical.TargetType || { values: [] }).values,
             linkTypeCategories: any[] = (categorical.LinkType || { values: [] }).values,
-            weightValues: any[] = (categorical.Weight && categorical.Weight[0] || { values: [] }).values;
+            weightValues: any[] = (categorical.Weight && categorical.Weight[0] || { values: [] }).values,
+            nodeWeightColumns: DataViewValueColumn[] = categorical.NodeWeight || <DataViewValueColumn[]>[],
+            sourceNodeWeightValues: any[] = (nodeWeightColumns[0] || { values: [] }).values,
+            targetNodeWeightValues: any[] = (nodeWeightColumns[1] || nodeWeightColumns[0] || { values: [] }).values,
+            nodeColorColumns: DataViewValueColumn[] = categorical.NodeColor || <DataViewValueColumn[]>[],
+            sourceNodeColorValues: any[] = (nodeColorColumns[0] || { values: [] }).values,
+            targetNodeColorValues: any[] = (nodeColorColumns[1] || nodeColorColumns[0] || { values: [] }).values;
+
+        const hasSeparateTargetWeights: boolean = nodeWeightColumns.length > 1;
+        const hasNodeColorData: boolean = nodeColorColumns.length > 0;
+        const hasSeparateTargetColors: boolean = nodeColorColumns.length > 1;
+
+        const assignNodeWeight = (node: ForceGraphNode, value: any): void => {
+            if (!node) {
+                return;
+            }
+
+            const numericValue: number = Number(value);
+
+            if (value === null || value === undefined || isNaN(numericValue)) {
+                return;
+            }
+
+            node.dataWeight = node.dataWeight !== undefined
+                ? Math.max(node.dataWeight, numericValue)
+                : numericValue;
+        };
+
+        const nodeColorHelper: ColorHelper = hasNodeColorData
+            ? new ColorHelper(
+                colorPalette,
+                {
+                    objectName: "nodeDataColors",
+                    propertyName: "fill"
+                },
+                settings.nodes.optionGroup.fillColor.value.value
+            )
+            : null;
+
+        const nodeColorFormatters: Array<IValueFormatter | null> = nodeColorColumns.map((column: DataViewValueColumn) => {
+            return valueFormatter.create({
+                format: valueFormatter.getFormatStringByColumn(column.source, true)
+            });
+        });
+
+        const nodeCategoryColors: { [key: string]: { color: string; label: string } } = {};
+        const nodeColorDataPoints: NodeColorDataPoints = {};
+
+        const assignNodeColor = (
+            node: ForceGraphNode,
+            rawValue: any,
+            column: DataViewValueColumn,
+            columnIndex: number
+        ): void => {
+            if (!hasNodeColorData || !node || !nodeColorHelper) {
+                return;
+            }
+
+            if (rawValue === undefined || rawValue === null || rawValue === "") {
+                return;
+            }
+
+            const key: string = String(rawValue);
+
+            const objects = column && column.objects ? column.objects[columnIndex] : undefined;
+            const formatterIndex: number = Math.max(nodeColorColumns.indexOf(column), 0);
+            const labelFormatter: IValueFormatter | null = nodeColorFormatters[formatterIndex];
+            const label: string = labelFormatter ? labelFormatter.format(rawValue) : key;
+            const paletteColor: string = nodeColorHelper.getColorForSeriesValue(objects, key);
+            const color: string = nodeColorHelper.getHighContrastColor("foreground", paletteColor);
+
+            if (!nodeCategoryColors[key]) {
+                nodeCategoryColors[key] = {
+                    color,
+                    label
+                };
+            } else if (objects && nodeCategoryColors[key].color !== color) {
+                nodeCategoryColors[key].color = color;
+            }
+
+            const categoryInfo = nodeCategoryColors[key];
+
+            node.color = categoryInfo.color;
+            node.colorValue = key;
+            node.colorLabel = categoryInfo.label;
+
+            if (!nodeColorDataPoints[key] && node.identity) {
+                nodeColorDataPoints[key] = {
+                    color: categoryInfo.color,
+                    label: categoryInfo.label,
+                    selectionId: node.identity,
+                    value: key
+                };
+            }
+        };
 
         let weightFormatter: IValueFormatter = null;
 
@@ -389,6 +485,10 @@ export class ForceGraph implements IVisual {
             const sourceType = sourceTypeCategories[i];
             const linkType = linkTypeCategories[i];
             const weight = weightValues[i];
+            const sourceNodeWeight = sourceNodeWeightValues[i];
+            const targetNodeWeight = hasSeparateTargetWeights ? targetNodeWeightValues[i] : sourceNodeWeight;
+            const sourceNodeColor = sourceNodeColorValues[i];
+            const targetNodeColor = hasSeparateTargetColors ? targetNodeColorValues[i] : sourceNodeColor;
 
             linkedByName[`${source},${target}`] = ForceGraph.DefaultValueOfExistingLink;
 
@@ -399,6 +499,7 @@ export class ForceGraph implements IVisual {
                     image: sourceType || ForceGraph.DefaultSourceType,
                     adj: {},
                     weight: 0,
+                    dataWeight: undefined,
                     selected: false,
                     links: [],
                     identity: host.createSelectionIdBuilder()
@@ -415,6 +516,7 @@ export class ForceGraph implements IVisual {
                     image: targetType || ForceGraph.DefaultTargetType,
                     adj: {},
                     weight: 0,
+                    dataWeight: undefined,
                     selected: false,
                     links: [],
                     identity: host.createSelectionIdBuilder()
@@ -429,6 +531,14 @@ export class ForceGraph implements IVisual {
 
             sourceNode.adj[targetNode.name] = sourceNode.adj[targetNode.name] + 1 || ForceGraph.DefaultValueOfExistingLink;
             targetNode.adj[sourceNode.name] = targetNode.adj[sourceNode.name] + 1 || ForceGraph.DefaultValueOfExistingLink;
+
+            assignNodeWeight(sourceNode, sourceNodeWeight);
+            assignNodeWeight(targetNode, targetNodeWeight);
+            if (hasNodeColorData) {
+                assignNodeColor(sourceNode, sourceNodeColor, nodeColorColumns[0], i);
+                const targetColorColumn = hasSeparateTargetColors ? nodeColorColumns[1] : nodeColorColumns[0];
+                assignNodeColor(targetNode, targetNodeColor, targetColorColumn, i);
+            }
 
             const tooltipInfo: VisualTooltipDataItem[] = ForceGraphTooltipsFactory.build(
                 {
@@ -486,10 +596,36 @@ export class ForceGraph implements IVisual {
             targetNode.links.push(link);
         }
 
-        // calculate nodes weight based on number of links
-        for (const node of Object.values(nodes)) {
-            node.weight = Object.values(node.adj).reduce((partialSum, a) => partialSum + a, 0);
+        const nodesArray: ForceGraphNode[] = Object.values(nodes);
+        const nodesWithDataWeight: ForceGraphNode[] = nodesArray.filter((node: ForceGraphNode) =>
+            node.dataWeight !== undefined && !isNaN(node.dataWeight));
+
+        if (nodesWithDataWeight.length) {
+            const nodeWeights: number[] = nodesWithDataWeight
+                .map((node: ForceGraphNode) => node.dataWeight as number);
+
+            const minNodeWeight: number = Math.min(...nodeWeights);
+            const maxNodeWeight: number = Math.max(...nodeWeights);
+            const domainMax: number = minNodeWeight === maxNodeWeight
+                ? minNodeWeight + 1
+                : maxNodeWeight;
+
+            const weightScale: d3ScaleLinearType<number, number> = d3ScaleLinear<number, number>()
+                .domain([minNodeWeight, domainMax])
+                .rangeRound([ForceGraph.MinNodeWeight, ForceGraph.MaxNodeRadius])
+                .clamp(true);
+
+            nodesWithDataWeight.forEach((node: ForceGraphNode) => {
+                node.weight = weightScale(node.dataWeight as number);
+            });
         }
+
+        // calculate nodes weight based on number of links if node weight isn't provided
+        nodesArray.forEach((node: ForceGraphNode) => {
+            if (node.weight === undefined || isNaN(node.weight)) {
+                node.weight = Object.values(node.adj).reduce((partialSum, a) => partialSum + a, 0);
+            }
+        });
 
         return {
             nodes,
@@ -499,6 +635,7 @@ export class ForceGraph implements IVisual {
             linkedByName,
             settings,
             linkTypes: linkDataPoints,
+            nodeCategories: nodeColorDataPoints,
             formatter: targetFormatter
         };
     }
@@ -562,6 +699,8 @@ export class ForceGraph implements IVisual {
 
         this.viewport = options.viewport;
 
+        this.updateNodeColorSettings();
+
         const k: number = Math.sqrt(Object.keys(this.data.nodes).length /
             (this.viewport.width * this.viewport.height));
 
@@ -604,6 +743,63 @@ export class ForceGraph implements IVisual {
         this.settings.setLocalizedOptions(this.localizationManager);
         const model = this.formattingSettingsService.buildFormattingModel(this.settings);
         return model;
+    }
+
+    private updateNodeColorSettings(): void {
+        if (!this.settings || !this.settings.nodes || !this.settings.nodes.colorGroup) {
+            return;
+        }
+
+        const colorGroup = this.settings.nodes.colorGroup;
+        const nodeCategories: NodeColorDataPoints = this.data && this.data.nodeCategories
+            ? this.data.nodeCategories
+            : {};
+
+        const wildcardSelector = dataViewWildcard.createDataViewWildcardSelector(
+            dataViewWildcard.DataViewWildcardMatchingOption.InstancesAndTotals
+        );
+
+        const slices = Object.keys(nodeCategories).map((key: string) => {
+            const dataPoint = nodeCategories[key];
+
+            const colorSlice = new formattingSettings.ColorPicker({
+                name: "fill",
+                displayName: dataPoint.label,
+                value: { value: dataPoint.color },
+                selector: wildcardSelector,
+                altConstantSelector: dataPoint.selectionId ? dataPoint.selectionId.getSelector() : undefined,
+                instanceKind: powerbi.VisualEnumerationInstanceKinds.ConstantOrRule
+            });
+
+            (colorSlice as any).dataValue = dataPoint.value;
+
+            return colorSlice;
+        });
+
+        colorGroup.slices = slices;
+        colorGroup.visible = slices.length > 0;
+
+        const colorOverrides: { [value: string]: string } = {};
+
+        slices.forEach((slice: formattingSettings.ColorPicker & { dataValue?: string }) => {
+            if (slice.value && slice.value.value && slice.dataValue) {
+                colorOverrides[slice.dataValue] = slice.value.value;
+            }
+        });
+
+        if (this.data && Object.keys(colorOverrides).length) {
+            Object.values(this.data.nodes).forEach((node: ForceGraphNode) => {
+                if (node.colorValue && colorOverrides[node.colorValue]) {
+                    node.color = colorOverrides[node.colorValue];
+                }
+            });
+
+            Object.keys(nodeCategories).forEach((key: string) => {
+                if (colorOverrides[key]) {
+                    nodeCategories[key].color = colorOverrides[key];
+                }
+            });
+        }
     }
 
     private render(): void {
@@ -796,7 +992,11 @@ export class ForceGraph implements IVisual {
                         ? ForceGraph.MinNodeWeight
                         : node.weight;
                 })
-                .style("fill", settings.nodes.optionGroup.fillColor.value.value)
+                .style("fill", (node: ForceGraphNode) => {
+                    return node.color
+                        ? node.color
+                        : settings.nodes.optionGroup.fillColor.value.value;
+                })
                 .style("stroke", settings.nodes.optionGroup.strokeColor.value.value)
                 .style("outline", `solid 0px ${this.colorHelper.getHighContrastColor("foreground", "black")}`)
                 .style("border-radius", (node: ForceGraphNode) => {
