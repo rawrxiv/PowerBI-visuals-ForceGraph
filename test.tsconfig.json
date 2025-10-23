@@ -10,6 +10,10 @@
         "sourceRoot": "../../src/",
         "moduleResolution": "node",
         "declaration": true,
+        "baseUrl": "./",
+        "paths": {
+            "d3-dispatch": ["types/d3-dispatch"]
+        },
         "lib": [
             "es2015",
             "dom"
