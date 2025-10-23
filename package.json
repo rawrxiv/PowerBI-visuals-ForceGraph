@@ -81,5 +81,8 @@
     "ts-loader": "9.5.1",
     "typescript": "^4.9.5",
     "webpack": "^5.96.1"
+  },
+  "overrides": {
+    "@types/d3-dispatch": "file:types/d3-dispatch"
   }
 }

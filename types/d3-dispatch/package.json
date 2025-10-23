@@ -1,0 +1,6 @@
+{
+  "name": "@types/d3-dispatch",
+  "version": "3.0.6-pbiviz",
+  "description": "Simplified d3-dispatch type definitions for Power BI visuals",
+  "types": "index.d.ts"
+}
