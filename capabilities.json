@@ -20,10 +20,20 @@
             "displayName": "Target"
         },
         {
+            "name": "NodeColor",
+            "kind": "Grouping",
+            "displayName": "Node Color"
+        },
+        {
             "displayNameKey": "Visual_Weight",
             "name": "Weight",
             "kind": "Measure",
             "displayName": "Weight"
+        },
+        {
+            "name": "NodeWeight",
+            "kind": "Measure",
+            "displayName": "Node Weight"
         },
         {
             "displayNameKey": "Visual_LinkType",
@@ -60,8 +70,14 @@
                     "Target": {
                         "max": 1
                     },
+                    "NodeColor": {
+                        "max": 2
+                    },
                     "Weight": {
                         "max": 1
+                    },
+                    "NodeWeight": {
+                        "max": 2
                     },
                     "LinkType": {
                         "max": 1
@@ -85,6 +101,11 @@
                         {
                             "for": {
                                 "in": "Target"
+                            }
+                        },
+                        {
+                            "for": {
+                                "in": "NodeColor"
                             }
                         },
                         {
@@ -114,6 +135,16 @@
                         {
                             "bind": {
                                 "to": "Weight"
+                            }
+                        },
+                        {
+                            "bind": {
+                                "to": "NodeWeight"
+                            }
+                        },
+                        {
+                            "bind": {
+                                "to": "NodeColor"
                             }
                         }
                     ]
@@ -300,6 +331,20 @@
                     }
                 },
                 "strokeColor": {
+                    "type": {
+                        "fill": {
+                            "solid": {
+                                "color": true
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "nodeDataColors": {
+            "displayNameKey": "Visual_NodeColors",
+            "properties": {
+                "fill": {
                     "type": {
                         "fill": {
                             "solid": {

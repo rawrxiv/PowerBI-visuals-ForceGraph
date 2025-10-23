@@ -71,7 +71,9 @@ export class ForceGraphColumns<T> {
 
     public Source: T = null;
     public Target: T = null;
+    public NodeColor: T = null;
     public Weight: T = null;
+    public NodeWeight: T = null;
     public LinkType: T = null;
     public SourceType: T = null;
     public TargetType: T = null;
