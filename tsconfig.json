@@ -9,6 +9,11 @@
     "outDir": "./.tmp/build/",
     "moduleResolution": "node",
     "declaration": true,
+    "skipLibCheck": true,
+    "baseUrl": "./",
+    "paths": {
+      "d3-dispatch": ["types/d3-dispatch"]
+    },
     "lib": ["es2017", "dom"]
   },
   "files": [
